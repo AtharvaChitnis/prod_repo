@@ -1,0 +1,21 @@
+{
+  "name": "quarry",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "predev": "npm run build -w @quarry/contracts",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev -w @quarry/api\" \"npm run dev -w @quarry/web\"",
+    "build": "npm run build -w @quarry/contracts && npm run build -w @quarry/api && npm run build -w @quarry/web",
+    "start": "npm run start -w @quarry/api",
+    "test": "npm run build -w @quarry/contracts && npm run test -w @quarry/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
