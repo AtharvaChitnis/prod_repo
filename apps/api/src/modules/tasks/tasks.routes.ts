@@ -1,23 +1,18 @@
 import { createResearchTaskSchema } from "@quarry/contracts";
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 import { ObjectId } from "mongodb";
-import { col, isDuplicateKey, parseObjectId } from "../../db.js";
+import { requireWorkspaceDoc } from "../../access.js";
+import { col, isDuplicateKey } from "../../db.js";
 import { asyncRoute, HttpError, validate } from "../../http.js";
+import { perActorLimit } from "../../limits.js";
 import { requireAuth } from "../../middleware/auth.js";
 import type { TaskDoc } from "../../types.js";
 import { attachUsageTask, releaseUsage, reserveResearchRun } from "../billing/usage.js";
-import { presentTask } from "../files/files.routes.js";
 import { loadProject } from "../projects/projects.routes.js";
+import { createTaskRecord, presentTask } from "./record.js";
 import { enqueue, removeQueued } from "./runner.js";
 
-const taskLimit = rateLimit({
-  windowMs: 60_000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => req.auth?.userId.toHexString() ?? req.ip ?? "anonymous",
-});
+const taskLimit = perActorLimit(20);
 
 export const taskRouter = Router();
 taskRouter.use(requireAuth);
@@ -34,25 +29,19 @@ taskRouter.post("/tasks", taskLimit, validate(createResearchTaskSchema), asyncRo
   }
 
   const usageEventId = await reserveResearchRun(project.workspaceId);
-  const now = new Date();
-  const task: TaskDoc = {
-    _id: new ObjectId(),
+  const task = createTaskRecord({
     workspaceId: project.workspaceId,
     projectId: project._id,
     type: "research",
-    status: "queued",
+    createdBy: req.auth!.userId,
+    usageEventId,
+    idempotencyKey,
     input: {
       question: req.body.question,
       options: req.body.options ?? {},
       metadata: req.body.metadata ?? {},
     },
-    progress: { step: "queued", percent: 0 },
-    usageEventId,
-    idempotencyKey,
-    createdBy: req.auth!.userId,
-    createdAt: now,
-    updatedAt: now,
-  };
+  });
   try {
     await col<TaskDoc>("tasks").insertOne(task);
   } catch (error) {
@@ -109,10 +98,6 @@ taskRouter.post("/tasks/:id/cancel", asyncRoute(async (req, res) => {
   res.json(presentTask(updated));
 }));
 
-async function loadTask(workspaceId: ObjectId, id: string): Promise<TaskDoc> {
-  const taskId = parseObjectId(id);
-  if (!taskId) throw new HttpError(404, "not_found", "Task not found");
-  const task = await col<TaskDoc>("tasks").findOne({ _id: taskId, workspaceId });
-  if (!task) throw new HttpError(404, "not_found", "Task not found");
-  return task;
+function loadTask(workspaceId: ObjectId, id: string): Promise<TaskDoc> {
+  return requireWorkspaceDoc<TaskDoc>("tasks", workspaceId, id, "Task");
 }

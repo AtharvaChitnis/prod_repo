@@ -15,6 +15,7 @@ export const ENTITLEMENTS: Record<PlanId, Entitlement> = {
 
 const PLAN_IDS = new Set<string>(["free", "starter", "pro", "business"]);
 
+/** Past-due keeps the paid plan during dunning. Cancelled and unknown states fall back to free. */
 export function effectivePlan(status: string | undefined, plan: string | undefined): PlanId {
   const known = plan && PLAN_IDS.has(plan) ? (plan as PlanId) : "free";
   if (status === "active" || status === "trialing" || status === "past_due") return known;

@@ -1,7 +1,8 @@
 import { createProjectSchema, patchProjectSchema } from "@quarry/contracts";
 import { Router } from "express";
 import { ObjectId } from "mongodb";
-import { col, parseObjectId } from "../../db.js";
+import { requireWorkspaceDoc } from "../../access.js";
+import { col } from "../../db.js";
 import { asyncRoute, HttpError, validate } from "../../http.js";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import type { ChunkDoc, FileDoc, ProjectDoc, ResultDoc, TaskDoc } from "../../types.js";
@@ -68,12 +69,8 @@ projectRouter.delete("/projects/:id", requireRole(["owner", "admin"]), asyncRout
   res.status(204).end();
 }));
 
-export async function loadProject(workspaceId: ObjectId, id: string): Promise<ProjectDoc> {
-  const projectId = parseObjectId(id);
-  if (!projectId) throw new HttpError(404, "not_found", "Project not found");
-  const project = await col<ProjectDoc>("projects").findOne({ _id: projectId, workspaceId });
-  if (!project) throw new HttpError(404, "not_found", "Project not found");
-  return project;
+export function loadProject(workspaceId: ObjectId, id: string): Promise<ProjectDoc> {
+  return requireWorkspaceDoc<ProjectDoc>("projects", workspaceId, id, "Project");
 }
 
 export function presentProject(project: ProjectDoc) {

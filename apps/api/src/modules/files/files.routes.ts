@@ -1,12 +1,14 @@
 import { Router } from "express";
 import multer from "multer";
 import { ObjectId } from "mongodb";
-import { col, parseObjectId } from "../../db.js";
+import { col } from "../../db.js";
 import { asyncRoute, HttpError } from "../../http.js";
 import { requireAuth } from "../../middleware/auth.js";
+import { requireWorkspaceDoc } from "../../access.js";
 import type { ChunkDoc, FileDoc, TaskDoc } from "../../types.js";
 import { currentEntitlement } from "../billing/usage.js";
 import { loadProject } from "../projects/projects.routes.js";
+import { createTaskRecord, presentTask } from "../tasks/record.js";
 import { enqueue } from "../tasks/runner.js";
 import { safeFilename } from "./extract.js";
 import { storage } from "./storage.js";
@@ -33,14 +35,15 @@ fileRouter.post("/projects/:id/files", upload.single("file"), asyncRoute(async (
   }
 
   const now = new Date();
+  const fileId = new ObjectId();
   const file: FileDoc = {
-    _id: new ObjectId(),
+    _id: fileId,
     workspaceId: project.workspaceId,
     projectId: project._id,
     filename: named.filename,
     contentType: named.contentType,
     bytes: req.file.size,
-    storageKey: `workspaces/${project.workspaceId.toHexString()}/files/${new ObjectId().toHexString()}`,
+    storageKey: `workspaces/${project.workspaceId.toHexString()}/files/${fileId.toHexString()}`,
     status: "uploaded",
     chunkCount: 0,
     truncated: false,
@@ -48,7 +51,6 @@ fileRouter.post("/projects/:id/files", upload.single("file"), asyncRoute(async (
     createdAt: now,
     updatedAt: now,
   };
-  file.storageKey = `workspaces/${project.workspaceId.toHexString()}/files/${file._id.toHexString()}`;
   await storage().put(file.storageKey, req.file.buffer, named.contentType);
   await col<FileDoc>("files").insertOne(file);
   const task = await queueIngest(file, req.auth!.userId);
@@ -84,31 +86,24 @@ fileRouter.post("/files/:id/ingest", asyncRoute(async (req, res) => {
 }));
 
 async function queueIngest(file: FileDoc, userId: ObjectId): Promise<TaskDoc> {
-  const now = new Date();
-  const task: TaskDoc = {
-    _id: new ObjectId(),
+  const task = createTaskRecord({
     workspaceId: file.workspaceId,
     projectId: file.projectId,
     type: "ingest",
-    status: "queued",
-    input: { fileId: file._id.toHexString() },
-    progress: { step: "queued", percent: 0 },
     createdBy: userId,
-    createdAt: now,
-    updatedAt: now,
-  };
+    input: { fileId: file._id.toHexString() },
+  });
   await col<TaskDoc>("tasks").insertOne(task);
-  await col<FileDoc>("files").updateOne({ _id: file._id }, { $set: { status: "processing", updatedAt: now, error: undefined } });
+  await col<FileDoc>("files").updateOne(
+    { _id: file._id },
+    { $set: { status: "processing", updatedAt: task.updatedAt, error: undefined } },
+  );
   enqueue(task._id);
   return task;
 }
 
-async function loadFile(workspaceId: ObjectId, id: string): Promise<FileDoc> {
-  const fileId = parseObjectId(id);
-  if (!fileId) throw new HttpError(404, "not_found", "File not found");
-  const file = await col<FileDoc>("files").findOne({ _id: fileId, workspaceId });
-  if (!file) throw new HttpError(404, "not_found", "File not found");
-  return file;
+function loadFile(workspaceId: ObjectId, id: string): Promise<FileDoc> {
+  return requireWorkspaceDoc<FileDoc>("files", workspaceId, id, "File");
 }
 
 export function presentFile(file: FileDoc) {
@@ -123,23 +118,5 @@ export function presentFile(file: FileDoc) {
     chunkCount: file.chunkCount,
     truncated: file.truncated,
     createdAt: file.createdAt,
-  };
-}
-
-export function presentTask(task: TaskDoc) {
-  return {
-    id: task._id.toHexString(),
-    projectId: task.projectId.toHexString(),
-    type: task.type,
-    status: task.status,
-    input: task.input,
-    progress: task.progress,
-    error: task.error ?? null,
-    resultId: task.resultId?.toHexString() ?? null,
-    metadata: task.input.metadata ?? {},
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-    startedAt: task.startedAt ?? null,
-    finishedAt: task.finishedAt ?? null,
   };
 }

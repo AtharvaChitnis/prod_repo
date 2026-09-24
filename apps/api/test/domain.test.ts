@@ -5,6 +5,9 @@ import { capText, chunkText } from "../src/modules/files/chunk.js";
 import { bindSources, parseResearchResult } from "../src/modules/ai/result.js";
 import { cosine, keywordScore, rankChunks } from "../src/modules/retrieval/rank.js";
 import { safeReturnTo } from "../src/modules/auth/returnTo.js";
+import { safeFilename } from "../src/modules/files/extract.js";
+import { createTaskRecord, presentTask } from "../src/modules/tasks/record.js";
+import { ObjectId } from "mongodb";
 
 describe("entitlements", () => {
   it("keeps a past-due paid plan and drops cancelled plans to free", () => {
@@ -52,6 +55,28 @@ describe("research output", () => {
     const bound = bindSources(parsed, new Set(["kept"]));
     assert.deepEqual(bound.findings[0].sourceIds, ["kept"]);
     assert.equal(bindSources({ ...parsed, findings: [{ ...parsed.findings[0], sourceIds: ["nope"] }] }, new Set(["kept"])).confidence, "low");
+  });
+});
+
+describe("uploads and task records", () => {
+  it("rejects a path-like filename and an unsupported type", () => {
+    assert.equal(safeFilename("..\\notes\\brief.md").filename, "brief.md");
+    assert.throws(() => safeFilename("payload.exe"), /Upload a pdf/);
+  });
+
+  it("queues a task without exposing the usage reservation", () => {
+    const task = createTaskRecord({
+      workspaceId: new ObjectId(),
+      projectId: new ObjectId(),
+      type: "research",
+      createdBy: new ObjectId(),
+      usageEventId: new ObjectId(),
+      input: { question: "What changed?", metadata: { source: "desk" } },
+    });
+    assert.equal(task.status, "queued");
+    const view = presentTask(task);
+    assert.equal(view.metadata && (view.metadata as { source: string }).source, "desk");
+    assert.equal("usageEventId" in view, false);
   });
 });
 

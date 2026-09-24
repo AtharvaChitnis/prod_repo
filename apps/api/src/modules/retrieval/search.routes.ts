@@ -1,18 +1,12 @@
 import { searchSchema } from "@quarry/contracts";
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 import { asyncRoute, validate } from "../../http.js";
+import { perActorLimit } from "../../limits.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { loadProject } from "../projects/projects.routes.js";
 import { retrieve } from "./retrieve.js";
 
-const searchLimit = rateLimit({
-  windowMs: 60_000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => req.auth?.userId.toHexString() ?? req.ip ?? "anonymous",
-});
+const searchLimit = perActorLimit(30);
 
 export const searchRouter = Router();
 searchRouter.use(requireAuth);

@@ -32,6 +32,7 @@ export async function extractText(filename: string, buffer: Buffer): Promise<str
     if (!buffer.subarray(0, 5).toString("utf8").startsWith("%PDF")) {
       throw new HttpError(400, "invalid_file", "File is not a PDF");
     }
+    // The legacy build runs on Node 20. Script evaluation stays off so a PDF cannot run embedded JavaScript.
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs") as typeof import("pdfjs-dist");
     pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
       require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs"),

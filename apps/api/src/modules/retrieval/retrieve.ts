@@ -36,6 +36,7 @@ async function loadCandidates(
   queryVector: number[],
   limit: number,
 ): Promise<ChunkDoc[]> {
+  // Atlas vector search is optional. A missing index or a local MongoDB falls back to in-process ranking.
   if (config.vectorIndex) {
     try {
       return await col<ChunkDoc>("chunks").aggregate<ChunkDoc>([

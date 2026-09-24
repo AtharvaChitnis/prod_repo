@@ -23,6 +23,7 @@ export function keywordScore(query: string, text: string): number {
   return hits / terms.length;
 }
 
+/** Semantic similarity carries more weight; keyword overlap keeps exact terms from being buried. */
 export function hybridScore(semantic: number, keyword: number): number {
   return 0.75 * semantic + 0.25 * keyword;
 }

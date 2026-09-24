@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { col, isDuplicateKey } from "../../db.js";
+import { col } from "../../db.js";
 import { HttpError } from "../../http.js";
 import type { SubscriptionDoc, UsageDoc } from "../../types.js";
 import { ENTITLEMENTS, effectivePlan, periodKey, withinLimit } from "./entitlements.js";
@@ -10,6 +10,11 @@ export async function currentEntitlement(workspaceId: ObjectId) {
   return { plan, status: subscription?.status ?? "active", entitlement: ENTITLEMENTS[plan], subscription };
 }
 
+/**
+ * Reserve a run before the task is queued, then recount.
+ * Insert-then-check closes the gap where two requests both read "under the limit" and both start.
+ * A failed or cancelled task deletes the reservation; a finished task marks it consumed.
+ */
 export async function reserveResearchRun(workspaceId: ObjectId): Promise<ObjectId> {
   const { entitlement } = await currentEntitlement(workspaceId);
   const usage = col<UsageDoc>("usage_events");
@@ -44,8 +49,4 @@ export async function consumeUsage(usageEventId: ObjectId): Promise<void> {
 
 export async function releaseUsage(usageEventId: ObjectId): Promise<void> {
   await col<UsageDoc>("usage_events").deleteOne({ _id: usageEventId, status: "reserved" });
-}
-
-export function ignoreDuplicate(error: unknown): void {
-  if (!isDuplicateKey(error)) throw error;
 }

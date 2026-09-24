@@ -1,6 +1,6 @@
 import { createWorkspaceSchema, inviteMemberSchema } from "@quarry/contracts";
 import { useEffect, useState } from "react";
-import { ApiError, api } from "../api";
+import { api, errorText } from "../api";
 import { useSession } from "../session";
 
 type Member = { userId: string; email: string; role: string };
@@ -21,7 +21,7 @@ export function Workspace() {
   }
 
   useEffect(() => {
-    void loadMembers().catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load members"));
+    void loadMembers().catch((err: unknown) => setError(errorText(err, "Could not load members")));
   }, [session?.workspace.id]);
 
   async function rename(event: React.FormEvent) {
@@ -32,7 +32,7 @@ export function Workspace() {
       await api(`/workspaces/${session.workspace.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not rename workspace");
+      setError(errorText(err, "Could not rename workspace"));
     }
   }
 
@@ -64,7 +64,7 @@ export function Workspace() {
       setEmail("");
       await loadMembers();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not add member");
+      setError(errorText(err, "Could not add member"));
     }
   }
 

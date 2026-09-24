@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { col, parseObjectId } from "../../db.js";
+import { requireWorkspaceDoc } from "../../access.js";
 import { asyncRoute, HttpError } from "../../http.js";
 import { requireAuth } from "../../middleware/auth.js";
 import type { ResultDoc } from "../../types.js";
@@ -43,12 +43,8 @@ function csv(value: string): string {
   return value;
 }
 
-async function loadResult(workspaceId: import("mongodb").ObjectId, id: string): Promise<ResultDoc> {
-  const resultId = parseObjectId(id);
-  if (!resultId) throw new HttpError(404, "not_found", "Result not found");
-  const result = await col<ResultDoc>("results").findOne({ _id: resultId, workspaceId });
-  if (!result) throw new HttpError(404, "not_found", "Result not found");
-  return result;
+function loadResult(workspaceId: import("mongodb").ObjectId, id: string): Promise<ResultDoc> {
+  return requireWorkspaceDoc<ResultDoc>("results", workspaceId, id, "Result");
 }
 
 function presentResult(result: ResultDoc) {

@@ -1,5 +1,10 @@
 const API = `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/api/v1`;
 
+/** Message from an API error envelope, or a fallback when the request never reached the server. */
+export function errorText(error: unknown, fallback = "Request failed"): string {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,

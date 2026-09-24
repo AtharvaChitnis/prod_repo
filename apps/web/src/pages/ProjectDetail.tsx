@@ -1,7 +1,7 @@
 import { createResearchTaskSchema, searchSchema } from "@quarry/contracts";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, api, downloadExport } from "../api";
+import { api, downloadExport, errorText } from "../api";
 
 type FileRow = {
   id: string;
@@ -60,7 +60,7 @@ export function ProjectDetail() {
   }
 
   useEffect(() => {
-    void load().catch((err: unknown) => setError(message(err)));
+    void load().catch((err: unknown) => setError(errorText(err)));
   }, [id]);
 
   const busy = files.some((file) => file.status === "processing") || tasks.some((task) => task.status === "queued" || task.status === "running");
@@ -83,7 +83,7 @@ export function ProjectDetail() {
       await api(`/projects/${id}/files`, { method: "POST", body });
       await load();
     } catch (err) {
-      setError(message(err));
+      setError(errorText(err));
     }
   }
 
@@ -99,7 +99,7 @@ export function ProjectDetail() {
       await api("/tasks", { method: "POST", body: JSON.stringify(parsed.data) });
       await load();
     } catch (err) {
-      setError(message(err));
+      setError(errorText(err));
     }
   }
 
@@ -115,7 +115,7 @@ export function ProjectDetail() {
       const data = await api<{ hits: Hit[] }>(`/projects/${id}/search`, { method: "POST", body: JSON.stringify(parsed.data) });
       setHits(data.hits);
     } catch (err) {
-      setError(message(err));
+      setError(errorText(err));
     }
   }
 
@@ -198,8 +198,4 @@ export function ProjectDetail() {
       </div>
     </section>
   );
-}
-
-function message(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Request failed";
 }

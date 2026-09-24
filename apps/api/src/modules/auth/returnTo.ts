@@ -1,3 +1,4 @@
+/** Only send the browser back to the configured web origin. Anything else returns to the project list. */
 export function safeReturnTo(webOrigin: string, candidate: string | undefined): string {
   const fallback = `${webOrigin.replace(/\/$/, "")}/app/projects`;
   if (!candidate) return fallback;

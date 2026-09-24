@@ -33,6 +33,10 @@ async function drain(): Promise<void> {
   }
 }
 
+/**
+ * Claim with a conditional update so two workers cannot run the same queued task.
+ * Completion also requires status "running", which leaves a cancel that landed mid-job in place.
+ */
 async function run(id: ObjectId): Promise<void> {
   const claimed = await col<TaskDoc>("tasks").findOneAndUpdate(
     { _id: id, status: "queued" },

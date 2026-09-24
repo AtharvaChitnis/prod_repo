@@ -6,7 +6,7 @@ import { log } from "../../logger.js";
 import type { ProjectDoc, ResultDoc, TaskDoc } from "../../types.js";
 import { researchModel, withTimeout } from "./gemini.js";
 import { bindSources, parseResearchResult } from "./result.js";
-import { assertNotCancelled } from "../tasks/control.js";
+import { assertNotCancelled, setTaskProgress } from "../tasks/control.js";
 import { retrieve } from "../retrieval/retrieve.js";
 
 export async function runResearch(task: TaskDoc): Promise<void> {
@@ -16,7 +16,7 @@ export async function runResearch(task: TaskDoc): Promise<void> {
   if (!project) throw new HttpError(404, "not_found", "Project not found");
 
   await assertNotCancelled(task._id);
-  await progress(task._id, "retrieve", 25);
+  await setTaskProgress(task._id, "retrieve", 25);
   const hits = await retrieve({
     workspaceId: task.workspaceId,
     projectId: task.projectId,
@@ -28,9 +28,10 @@ export async function runResearch(task: TaskDoc): Promise<void> {
   }
 
   await assertNotCancelled(task._id);
-  await progress(task._id, "generate", 60);
+  await setTaskProgress(task._id, "generate", 60);
   const started = Date.now();
   const allowed = new Set(hits.map((hit) => hit.chunkId));
+  // Delimiters mark retrieved text as data. The model is told to ignore instructions that appear inside a source.
   const sourceBlock = hits.map((hit) => `[source id=${hit.chunkId} file="${hit.sourceLabel}"]\n${hit.text}\n[/source]`).join("\n\n");
   const instruction = [
     "You are a research analyst for a B2B workspace.",
@@ -99,11 +100,4 @@ export async function runResearch(task: TaskDoc): Promise<void> {
 async function generate(prompt: string): Promise<string> {
   const response = await withTimeout(researchModel().generateContent(prompt), 45_000);
   return response.response.text();
-}
-
-async function progress(taskId: ObjectId, step: string, percent: number): Promise<void> {
-  await col<TaskDoc>("tasks").updateOne(
-    { _id: taskId, status: "running" },
-    { $set: { progress: { step, percent }, updatedAt: new Date() } },
-  );
 }

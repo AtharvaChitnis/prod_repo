@@ -19,6 +19,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // A failed /auth/me means signed out. The timeout in api() keeps this from hanging when the API is down.
   async function refresh() {
     try {
       setSession(await api<Session>("/auth/me"));

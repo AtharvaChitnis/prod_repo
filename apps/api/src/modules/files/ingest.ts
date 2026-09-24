@@ -3,7 +3,7 @@ import { col } from "../../db.js";
 import { CancelledError, HttpError } from "../../http.js";
 import type { ChunkDoc, FileDoc, TaskDoc } from "../../types.js";
 import { embedTexts } from "../ai/gemini.js";
-import { assertNotCancelled } from "../tasks/control.js";
+import { assertNotCancelled, setTaskProgress } from "../tasks/control.js";
 import { capText, chunkText } from "./chunk.js";
 import { extractText } from "./extract.js";
 import { storage } from "./storage.js";
@@ -25,7 +25,7 @@ export async function ingestFile(task: TaskDoc): Promise<void> {
     const pieces = chunkText(extracted.text);
     if (!pieces.length) throw new HttpError(422, "no_text", "No readable text was found in that file");
 
-    await updateProgress(task._id, "embed", 40);
+    await setTaskProgress(task._id, "embed", 40);
     await assertNotCancelled(task._id);
     const vectors = await embedTexts(pieces);
     await col<ChunkDoc>("chunks").deleteMany({ fileId: file._id });
@@ -55,11 +55,4 @@ export async function ingestFile(task: TaskDoc): Promise<void> {
     }
     throw error;
   }
-}
-
-async function updateProgress(taskId: ObjectId, step: string, percent: number): Promise<void> {
-  await col<TaskDoc>("tasks").updateOne(
-    { _id: taskId, status: "running" },
-    { $set: { progress: { step, percent }, updatedAt: new Date() } },
-  );
 }

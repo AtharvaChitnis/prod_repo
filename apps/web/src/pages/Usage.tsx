@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, api } from "../api";
+import { api, errorText } from "../api";
 
 type UsageResponse = {
   period: string;
@@ -21,7 +21,7 @@ export function Usage() {
         setUsage(current);
         setHistory(past.events);
       })
-      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load usage"));
+      .catch((err: unknown) => setError(errorText(err, "Could not load usage")));
   }, []);
 
   return (

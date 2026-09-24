@@ -1,7 +1,7 @@
 import { createProjectSchema } from "@quarry/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, api } from "../api";
+import { api, errorText } from "../api";
 
 type Project = { id: string; name: string; brief: string; updatedAt: string };
 
@@ -17,7 +17,7 @@ export function Projects() {
   }
 
   useEffect(() => {
-    void load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load projects"));
+    void load().catch((err: unknown) => setError(errorText(err, "Could not load projects")));
   }, []);
 
   async function create(event: React.FormEvent) {

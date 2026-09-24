@@ -42,6 +42,7 @@ export function createApp(): express.Express {
   });
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(cors({ origin: config.webOrigin, credentials: true }));
+  // Stripe signature checks need the raw body, so this route is registered before JSON parsing.
   app.post(`${API_PREFIX}/billing/webhook`, express.raw({ type: "application/json" }), billingWebhook);
   app.use(express.json({ limit: "1mb" }));
   app.use(rateLimit({

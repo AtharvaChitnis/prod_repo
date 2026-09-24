@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ApiError, api } from "../api";
+import { api, errorText } from "../api";
 
 type BillingResponse = {
   plan: string;
@@ -21,7 +21,7 @@ export function Billing() {
   }
 
   useEffect(() => {
-    void load().catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load billing"));
+    void load().catch((err: unknown) => setError(errorText(err, "Could not load billing")));
   }, []);
 
   async function checkout(plan: string) {
@@ -30,7 +30,7 @@ export function Billing() {
       const data = await api<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan }) });
       if (data.url) window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Checkout failed");
+      setError(errorText(err, "Checkout failed"));
     }
   }
 
@@ -39,7 +39,7 @@ export function Billing() {
       const data = await api<{ url: string }>("/billing/portal", { method: "POST" });
       if (data.url) window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Portal failed");
+      setError(errorText(err, "Portal failed"));
     }
   }
 

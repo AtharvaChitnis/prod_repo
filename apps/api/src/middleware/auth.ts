@@ -5,6 +5,7 @@ import { HttpError } from "../http.js";
 import type { MembershipDoc, UserDoc } from "../types.js";
 import { readCookie, verifySession } from "../modules/auth/session.js";
 
+/** The cookie identifies the user. Role and workspace membership are loaded from the database on each request. */
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     const token = readCookie(req.headers.cookie, "quarry_session");
