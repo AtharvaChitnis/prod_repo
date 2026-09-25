@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { useSession } from "../session";
+import { useSession } from "../useSession";
 
 export function Shell() {
   const { session, refresh } = useSession();

@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { API_PREFIX } from "@quarry/contracts";
 import { openApiDocument, routeCatalog } from "./catalog.js";
 import { config } from "./config.js";
-import { mongoClient } from "./db.js";
+import { pingMongo } from "./db.js";
 import { sendError } from "./http.js";
 import { log } from "./logger.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
@@ -52,12 +52,15 @@ export function createApp(): express.Express {
     legacyHeaders: false,
   }));
 
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
   app.get(`${API_PREFIX}/health`, (_req, res) => {
     res.json({ status: "ok" });
   });
   app.get(`${API_PREFIX}/ready`, async (_req, res) => {
     try {
-      await mongoClient().db().command({ ping: 1 });
+      await pingMongo();
       res.json({ status: "ready" });
     } catch {
       res.status(503).json({ error: { code: "not_ready", message: "Database is unavailable" } });

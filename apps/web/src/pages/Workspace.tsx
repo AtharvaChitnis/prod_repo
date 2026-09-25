@@ -1,7 +1,7 @@
 import { createWorkspaceSchema, inviteMemberSchema } from "@quarry/contracts";
 import { useEffect, useState } from "react";
 import { api, errorText } from "../api";
-import { useSession } from "../session";
+import { useSession } from "../useSession";
 
 type Member = { userId: string; email: string; role: string };
 

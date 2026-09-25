@@ -1,8 +1,10 @@
-import { MongoClient, ObjectId, type Collection, type Document } from "mongodb";
+import { MongoClient, ObjectId, type Collection, type CreateIndexesOptions, type Document, type IndexSpecification } from "mongodb";
 import { config } from "./config.js";
 import { log } from "./logger.js";
+import { databaseName, mongoErrorFields } from "./mongoError.js";
 
 let client: MongoClient | undefined;
+let activeDatabase = "quarry";
 let createdConnections = 0;
 
 export function parseObjectId(id: string | undefined | null): ObjectId | null {
@@ -21,17 +23,21 @@ export async function connectMongo(): Promise<void> {
   // Raise minPoolSize if checkout latency after idle periods shows up in logs.
   // maxIdleTimeMS 120s releases unused sockets on a low-traffic instance.
   // socketTimeoutMS 45s covers chunk reads without leaving a hung operation open.
+  activeDatabase = databaseName(config.mongoUri);
   client = new MongoClient(config.mongoUri, {
     maxPoolSize: 20,
     minPoolSize: 0,
     maxIdleTimeMS: 120_000,
     connectTimeoutMS: 10_000,
     socketTimeoutMS: 45_000,
-    serverSelectionTimeoutMS: 5_000,
+    serverSelectionTimeoutMS: 8_000,
   });
 
-  client.on("connectionCheckOutFailed", (event: { reason?: string }) => {
-    log("error", "mongo_pool_checkout_failed", { reason: event.reason ?? "unknown" });
+  client.on("connectionCheckOutFailed", (event: { reason?: string; error?: unknown }) => {
+    log("error", "mongo_pool_checkout_failed", {
+      reason: event.reason ?? "unknown",
+      ...mongoErrorFields(event.error),
+    });
   });
   client.on("connectionCreated", () => {
     createdConnections += 1;
@@ -43,10 +49,15 @@ export async function connectMongo(): Promise<void> {
   await client.connect();
   await ensureIndexes();
   log("info", "mongo_connected", {
+    database: activeDatabase,
     maxPoolSize: 20,
     minPoolSize: 0,
     retrieval: config.vectorIndex ? "atlas_vector" : "in_process_hybrid",
   });
+}
+
+export async function pingMongo(): Promise<void> {
+  await mongoClient().db(activeDatabase).command({ ping: 1 });
 }
 
 export function mongoClient(): MongoClient {
@@ -55,37 +66,45 @@ export function mongoClient(): MongoClient {
 }
 
 export function col<T extends Document>(name: string): Collection<T> {
-  return mongoClient().db().collection<T>(name);
+  return mongoClient().db(activeDatabase).collection<T>(name);
 }
 
 export async function closeMongo(): Promise<void> {
   await client?.close();
   client = undefined;
+  activeDatabase = "quarry";
 }
 
 async function ensureIndexes(): Promise<void> {
-  await col("users").createIndex({ email: 1 }, { unique: true });
-  await col("users").createIndex({ googleSub: 1 }, { unique: true });
-  await col("memberships").createIndex({ workspaceId: 1, userId: 1 }, { unique: true });
-  await col("memberships").createIndex({ userId: 1 });
-  await col("projects").createIndex({ workspaceId: 1, updatedAt: -1 });
-  await col("tasks").createIndex({ workspaceId: 1, projectId: 1, createdAt: -1 });
-  await col("tasks").createIndex(
-    { workspaceId: 1, idempotencyKey: 1 },
-    { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } },
-  );
-  await col("files").createIndex({ workspaceId: 1, projectId: 1, createdAt: -1 });
-  await col("chunks").createIndex({ workspaceId: 1, projectId: 1 });
-  await col("chunks").createIndex({ fileId: 1 });
-  await col("results").createIndex({ workspaceId: 1, taskId: 1 });
-  await col("usage_events").createIndex({ workspaceId: 1, period: 1, type: 1, status: 1 });
-  await col("subscriptions").createIndex({ workspaceId: 1 }, { unique: true });
-  await col("subscriptions").createIndex({ stripeSubscriptionId: 1 }, { sparse: true });
-  await col("oauth_states").createIndex({ state: 1 }, { unique: true });
-  await col("oauth_states").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-  await col("billing_events").createIndex({ eventId: 1 }, { unique: true });
-  await col("audit_events").createIndex({ workspaceId: 1, createdAt: -1 });
-  await col("ai_runs").createIndex({ workspaceId: 1, createdAt: -1 });
+  const indexes: Array<[string, IndexSpecification, CreateIndexesOptions?]> = [
+    ["users", { email: 1 }, { unique: true }],
+    ["users", { googleSub: 1 }, { unique: true }],
+    ["memberships", { workspaceId: 1, userId: 1 }, { unique: true }],
+    ["memberships", { userId: 1 }],
+    ["projects", { workspaceId: 1, updatedAt: -1 }],
+    ["tasks", { workspaceId: 1, projectId: 1, createdAt: -1 }],
+    ["tasks", { workspaceId: 1, idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }],
+    ["files", { workspaceId: 1, projectId: 1, createdAt: -1 }],
+    ["chunks", { workspaceId: 1, projectId: 1 }],
+    ["chunks", { fileId: 1 }],
+    ["results", { workspaceId: 1, taskId: 1 }],
+    ["usage_events", { workspaceId: 1, period: 1, type: 1, status: 1 }],
+    ["subscriptions", { workspaceId: 1 }, { unique: true }],
+    ["subscriptions", { stripeSubscriptionId: 1 }, { sparse: true }],
+    ["oauth_states", { state: 1 }, { unique: true }],
+    ["oauth_states", { expiresAt: 1 }, { expireAfterSeconds: 0 }],
+    ["billing_events", { eventId: 1 }, { unique: true }],
+    ["audit_events", { workspaceId: 1, createdAt: -1 }],
+    ["ai_runs", { workspaceId: 1, createdAt: -1 }],
+  ];
+  for (const [name, spec, options] of indexes) {
+    try {
+      await col(name).createIndex(spec, options);
+    } catch (error) {
+      const fields = mongoErrorFields(error);
+      throw Object.assign(new Error(`Index on ${name} failed: ${fields.message}`), fields);
+    }
+  }
 }
 
 export function isDuplicateKey(error: unknown): boolean {

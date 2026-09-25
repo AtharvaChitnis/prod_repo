@@ -10,6 +10,7 @@ import { safeReturnTo } from "./returnTo.js";
 import { clearSessionCookie, setSessionCookie, signSession } from "./session.js";
 import { requireAuth } from "../../middleware/auth.js";
 import type { MembershipDoc, SubscriptionDoc, UserDoc, WorkspaceDoc } from "../../types.js";
+import { exchangeGoogleCode, googleAuthorizationUrl, googleRedirectUri } from "./googleOAuth.js";
 
 const authLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -28,8 +29,12 @@ authRouter.get("/auth/oauth/:provider/start", authLimit, asyncRoute(async (req, 
   if (req.params.provider !== "google") {
     throw new HttpError(404, "unknown_provider", "That sign-in provider is not enabled");
   }
-  if (!config.googleClientId || !config.googleClientSecret) {
-    throw new HttpError(503, "oauth_not_configured", "Google OAuth is not configured");
+  const missing = [
+    !config.googleClientId ? "GOOGLE_CLIENT_ID" : "",
+    !config.googleClientSecret ? "GOOGLE_CLIENT_SECRET" : "",
+  ].filter(Boolean);
+  if (missing.length) {
+    throw new HttpError(503, "oauth_not_configured", `Google OAuth is not configured. Set ${missing.join(" and ")} and restart the API.`);
   }
   const verifier = base64url(randomBytes(32));
   const challenge = base64url(createHash("sha256").update(verifier).digest());
@@ -42,17 +47,13 @@ authRouter.get("/auth/oauth/:provider/start", authLimit, asyncRoute(async (req, 
     createdAt: new Date(),
     expiresAt: new Date(Date.now() + 10 * 60 * 1000),
   });
-  const redirectUri = `${config.publicApiUrl}/api/v1/auth/oauth/google/callback`;
-  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", config.googleClientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "openid email profile");
-  url.searchParams.set("state", state);
-  url.searchParams.set("code_challenge", challenge);
-  url.searchParams.set("code_challenge_method", "S256");
-  url.searchParams.set("prompt", "select_account");
-  res.redirect(url.toString());
+  const redirectUri = googleRedirectUri(config.publicApiUrl);
+  res.redirect(googleAuthorizationUrl({
+    clientId: config.googleClientId,
+    redirectUri,
+    state,
+    codeChallenge: challenge,
+  }));
 }));
 
 authRouter.get("/auth/oauth/:provider/callback", asyncRoute(async (req, res) => {
@@ -61,40 +62,35 @@ authRouter.get("/auth/oauth/:provider/callback", asyncRoute(async (req, res) => 
   }
   const state = typeof req.query.state === "string" ? req.query.state : "";
   const code = typeof req.query.code === "string" ? req.query.code : "";
-  const stored = await col<{ state: string; codeVerifier: string; returnTo: string }>("oauth_states").findOne({ state });
+  if (typeof req.query.error === "string") {
+    throw new HttpError(401, "oauth_denied", "Google sign-in was cancelled or denied");
+  }
+  const stored = await col<{ state: string; codeVerifier: string; returnTo: string }>("oauth_states").findOne({
+    state,
+    expiresAt: { $gt: new Date() },
+  });
   await col("oauth_states").deleteOne({ state });
   if (!stored || !code) throw new HttpError(400, "oauth_state", "Sign-in could not be verified");
 
-  const redirectUri = `${config.publicApiUrl}/api/v1/auth/oauth/google/callback`;
-  const body = new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    client_id: config.googleClientId,
-    client_secret: config.googleClientSecret,
-    redirect_uri: redirectUri,
-    code_verifier: stored.codeVerifier,
-  });
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
-  if (!tokenResponse.ok) throw new HttpError(401, "oauth_exchange", "Sign-in could not be completed");
-  const tokenJson = await tokenResponse.json() as { access_token?: string };
-  if (!tokenJson.access_token) throw new HttpError(401, "oauth_exchange", "Sign-in could not be completed");
-
-  const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-    headers: { Authorization: `Bearer ${tokenJson.access_token}` },
-  });
-  if (!profileResponse.ok) throw new HttpError(401, "oauth_profile", "Sign-in profile could not be read");
-  const profile = await profileResponse.json() as { sub?: string; email?: string; name?: string; picture?: string };
-  if (!profile.sub || !profile.email) throw new HttpError(401, "oauth_profile", "Google did not return an email");
+  const redirectUri = googleRedirectUri(config.publicApiUrl);
+  let profile;
+  try {
+    profile = await exchangeGoogleCode({
+      code,
+      codeVerifier: stored.codeVerifier,
+      redirectUri,
+      clientId: config.googleClientId,
+      clientSecret: config.googleClientSecret,
+    });
+  } catch {
+    throw new HttpError(401, "oauth_exchange", "Google sign-in could not be completed");
+  }
 
   const now = new Date();
   const users = col<UserDoc>("users");
   let user = await users.findOne({ googleSub: profile.sub });
   if (!user) {
-    const byEmail = await users.findOne({ email: profile.email.toLowerCase() });
+    const byEmail = await users.findOne({ email: profile.email });
     if (byEmail) {
       await users.updateOne({ _id: byEmail._id }, { $set: { googleSub: profile.sub, lastLoginAt: now, name: profile.name || byEmail.name } });
       user = await users.findOne({ _id: byEmail._id });
@@ -104,7 +100,7 @@ authRouter.get("/auth/oauth/:provider/callback", asyncRoute(async (req, res) => 
     const insertedId = new ObjectId();
     user = {
       _id: insertedId,
-      email: profile.email.toLowerCase(),
+      email: profile.email,
       name: profile.name || profile.email,
       avatarUrl: profile.picture,
       googleSub: profile.sub,
