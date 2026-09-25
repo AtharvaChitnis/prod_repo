@@ -28,12 +28,13 @@ The API listens on port 4000. The web app calls it with cookies.
 ## Render
 
 1. Create a Blueprint from `render.yaml`.
-2. Set the secret env vars, including `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Use MongoDB Atlas for `MONGO_URI`.
-3. Deploy the API and copy its public URL into `PUBLIC_API_URL` and the web service `VITE_API_URL`.
-4. Set `WEB_ORIGIN` to the static site URL.
-5. Add the API callback `https://<api>/api/v1/auth/oauth/google/callback` to the Google client.
-6. Point Stripe webhooks at `https://<api>/api/v1/billing/webhook`.
-7. Set `S3_BUCKET` and credentials. Render disk does not keep uploads.
+2. Set the secret env vars, including `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Use the Atlas-provided `mongodb+srv://` connection string for `MONGO_URI`, with the database name included.
+3. In Atlas, add every outbound IP address shown in the Render API service's Networking settings to the Atlas project's Network Access list. Use a Render dedicated outbound IP set for a stable production allowlist.
+4. Deploy the API and copy its public URL into `PUBLIC_API_URL` and the web service `VITE_API_URL`.
+5. Set `WEB_ORIGIN` to the static site URL.
+6. Add the API callback `https://<api>/api/v1/auth/oauth/google/callback` to the Google client.
+7. Point Stripe webhooks at `https://<api>/api/v1/billing/webhook`.
+8. Set `S3_BUCKET` and credentials. Render disk does not keep uploads.
 
 ## MongoDB pool
 
