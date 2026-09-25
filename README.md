@@ -17,7 +17,7 @@ Endpoints live under `/api/v1`. `GET /api/v1` lists them. Bodies accept `metadat
 ## Local run
 
 1. Copy `.env.example` to `.env` and set `MONGO_URI`.
-2. Create a Google OAuth client. Redirect URI: `http://localhost:4000/api/v1/auth/oauth/google/callback`.
+2. Create a Google OAuth 2.0 **Web application** client. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Add `http://localhost:4000/api/v1/auth/oauth/google/callback` as an authorized redirect URI.
 3. Add `GEMINI_API_KEY` for ingest, search, and research.
 4. `npm install`
 5. `npm run dev`
@@ -28,7 +28,7 @@ The API listens on port 4000. The web app calls it with cookies.
 ## Render
 
 1. Create a Blueprint from `render.yaml`.
-2. Set the secret env vars. Use MongoDB Atlas for `MONGO_URI`.
+2. Set the secret env vars, including `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Use MongoDB Atlas for `MONGO_URI`.
 3. Deploy the API and copy its public URL into `PUBLIC_API_URL` and the web service `VITE_API_URL`.
 4. Set `WEB_ORIGIN` to the static site URL.
 5. Add the API callback `https://<api>/api/v1/auth/oauth/google/callback` to the Google client.

@@ -8,6 +8,8 @@ import { safeReturnTo } from "../src/modules/auth/returnTo.js";
 import { safeFilename } from "../src/modules/files/extract.js";
 import { createTaskRecord, presentTask } from "../src/modules/tasks/record.js";
 import { ObjectId } from "mongodb";
+import { databaseName, mongoErrorFields } from "../src/mongoError.js";
+import { exchangeGoogleCode, googleAuthorizationUrl, googleRedirectUri } from "../src/modules/auth/googleOAuth.js";
 
 describe("entitlements", () => {
   it("keeps a past-due paid plan and drops cancelled plans to free", () => {
@@ -80,6 +82,25 @@ describe("uploads and task records", () => {
   });
 });
 
+describe("mongo errors", () => {
+  it("names the quarry database when the Atlas URI omits one", () => {
+    assert.equal(databaseName("mongodb+srv://user:secret@cluster.example.net/?appName=Cluster0"), "quarry");
+    assert.equal(databaseName("mongodb://127.0.0.1:27017/research"), "research");
+  });
+
+  it("keeps the server code and strips the connection string", () => {
+    const fields = mongoErrorFields({
+      code: 18,
+      codeName: "AuthenticationFailed",
+      message: "bad auth mongodb+srv://user:secret@cluster.example.net/quarry",
+    });
+    assert.equal(fields.code, 18);
+    assert.equal(fields.codeName, "AuthenticationFailed");
+    assert.equal(fields.message.includes("secret"), false);
+    assert.match(fields.message, /mongodb:\/\/redacted/);
+  });
+});
+
 describe("oauth return", () => {
   it("rejects a return URL on another origin", () => {
     assert.equal(
@@ -90,5 +111,73 @@ describe("oauth return", () => {
       safeReturnTo("http://localhost:5173", "http://localhost:5173/app/billing"),
       "http://localhost:5173/app/billing",
     );
+  });
+});
+
+describe("Google OAuth", () => {
+  it("builds the canonical callback URI when the API URL has a trailing slash", () => {
+    assert.equal(googleRedirectUri("https://api.example.com/"), "https://api.example.com/api/v1/auth/oauth/google/callback");
+  });
+
+  it("builds a Google authorization URL with PKCE and a state value", () => {
+    const url = new URL(googleAuthorizationUrl({
+      clientId: "client-id",
+      redirectUri: "https://api.example.com/api/v1/auth/oauth/google/callback",
+      state: "one-time-state",
+      codeChallenge: "pkce-challenge",
+    }));
+    assert.equal(url.origin, "https://accounts.google.com");
+    assert.equal(url.searchParams.get("client_id"), "client-id");
+    assert.equal(url.searchParams.get("redirect_uri"), "https://api.example.com/api/v1/auth/oauth/google/callback");
+    assert.equal(url.searchParams.get("response_type"), "code");
+    assert.equal(url.searchParams.get("scope"), "openid email profile");
+    assert.equal(url.searchParams.get("state"), "one-time-state");
+    assert.equal(url.searchParams.get("code_challenge"), "pkce-challenge");
+    assert.equal(url.searchParams.get("code_challenge_method"), "S256");
+  });
+
+  it("exchanges the code with the matching redirect URI and returns a verified profile", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock: typeof fetch = async (input, init) => {
+      calls.push({ url: String(input), init });
+      if (calls.length === 1) return Response.json({ access_token: "access-token" });
+      return Response.json({ sub: "google-sub", email: "Person@Example.com", email_verified: true, name: "Person" });
+    };
+    const profile = await exchangeGoogleCode({
+      code: "auth-code",
+      codeVerifier: "pkce-verifier",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      redirectUri: "https://api.example.com/api/v1/auth/oauth/google/callback",
+    }, fetchMock);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url, "https://oauth2.googleapis.com/token");
+    assert.equal(calls[1].url, "https://openidconnect.googleapis.com/v1/userinfo");
+    const tokenBody = new URLSearchParams(String(calls[0].init?.body));
+    assert.equal(tokenBody.get("code"), "auth-code");
+    assert.equal(tokenBody.get("code_verifier"), "pkce-verifier");
+    assert.equal(tokenBody.get("redirect_uri"), "https://api.example.com/api/v1/auth/oauth/google/callback");
+    assert.equal((calls[1].init?.headers as Record<string, string>).Authorization, "Bearer access-token");
+    assert.deepEqual(profile, {
+      sub: "google-sub",
+      email: "person@example.com",
+      email_verified: true,
+      name: "Person",
+      picture: undefined,
+    });
+  });
+
+  it("rejects unverified Google email addresses", async () => {
+    const fetchMock: typeof fetch = async (_input, init) => {
+      if (init?.method === "POST") return Response.json({ access_token: "access-token" });
+      return Response.json({ sub: "google-sub", email: "person@example.com", email_verified: false });
+    };
+    await assert.rejects(exchangeGoogleCode({
+      code: "auth-code",
+      codeVerifier: "pkce-verifier",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      redirectUri: "https://api.example.com/api/v1/auth/oauth/google/callback",
+    }, fetchMock), /verified email/);
   });
 });

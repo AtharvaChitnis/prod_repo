@@ -1,6 +1,6 @@
 import { oauthStartUrl } from "../api";
 import { Navigate } from "react-router-dom";
-import { useSession } from "../session";
+import { useSession } from "../useSession";
 
 export function Login() {
   const { session, loading } = useSession();

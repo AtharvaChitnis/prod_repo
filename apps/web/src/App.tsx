@@ -6,7 +6,7 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { Usage } from "./pages/Usage";
 import { Billing } from "./pages/Billing";
 import { Workspace } from "./pages/Workspace";
-import { useSession } from "./session";
+import { useSession } from "./useSession";
 
 export function App() {
   return (

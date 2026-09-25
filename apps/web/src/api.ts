@@ -1,4 +1,5 @@
-const API = `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/api/v1`;
+const API_ORIGIN = import.meta.env.VITE_API_URL || "";
+const API = `${API_ORIGIN}/api/v1`;
 
 /** Message from an API error envelope, or a fallback when the request never reached the server. */
 export function errorText(error: unknown, fallback = "Request failed"): string {
@@ -37,7 +38,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export function oauthStartUrl(): string {
   const returnTo = `${window.location.origin}/app/projects`;
-  const base = import.meta.env.VITE_API_URL || "http://localhost:4000";
+  const base = API_ORIGIN;
   return `${base}/api/v1/auth/oauth/google/start?returnTo=${encodeURIComponent(returnTo)}`;
 }
 

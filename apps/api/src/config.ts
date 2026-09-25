@@ -17,7 +17,7 @@ export const config = {
   port: Number(process.env.PORT || 4000),
   mongoUri: optional("MONGO_URI"),
   webOrigin: optional("WEB_ORIGIN") || "http://localhost:5173",
-  publicApiUrl: optional("PUBLIC_API_URL") || `http://localhost:${process.env.PORT || 4000}`,
+  publicApiUrl: (optional("PUBLIC_API_URL") || `http://localhost:${process.env.PORT || 4000}`).replace(/\/+$/, ""),
   sessionSecret: optional("SESSION_SECRET") || (isProd ? "" : "dev-only-session-secret-change-me"),
   googleClientId: optional("GOOGLE_CLIENT_ID"),
   googleClientSecret: optional("GOOGLE_CLIENT_SECRET"),
