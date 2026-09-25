@@ -10,7 +10,7 @@ import { createTaskRecord, presentTask } from "../src/modules/tasks/record.js";
 import { ObjectId } from "mongodb";
 import { databaseName, mongoErrorFields } from "../src/mongoError.js";
 import { exchangeGoogleCode, googleAuthorizationUrl, googleRedirectUri } from "../src/modules/auth/googleOAuth.js";
-import { webResearchResponse } from "../src/modules/ai/web.js";
+import { providerError, webResearchResponse } from "../src/modules/ai/web.js";
 
 describe("entitlements", () => {
   it("keeps a past-due paid plan and drops cancelled plans to free", () => {
@@ -184,6 +184,12 @@ describe("Google OAuth", () => {
 });
 
 describe("web research", () => {
+  it("turns provider quota exhaustion into an actionable API error", () => {
+    const error = providerError(429, { error: { message: "quota exceeded" } });
+    assert.equal(error.code, "ai_quota_exhausted");
+    assert.match(error.message, /quota is exhausted/i);
+  });
+
   it("keeps grounded web sources returned by Gemini", () => {
     const response = webResearchResponse({
       candidates: [{

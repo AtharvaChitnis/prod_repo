@@ -2,6 +2,7 @@ import { config } from "../../config.js";
 import { HttpError } from "../../http.js";
 
 export type WebSource = { id: string; label: string; url: string };
+type GeminiErrorBody = { error?: { code?: number; message?: string } };
 
 export async function generateWebResearch(
   prompt: string,
@@ -25,13 +26,28 @@ export async function generateWebResearch(
   );
   const body: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new HttpError(502, "web_research_failed", "Google web research could not be completed");
+    throw providerError(response.status, body);
   }
   const parsed = webResearchResponse(body);
   if (!parsed.text) {
     throw new HttpError(502, "web_research_failed", "Google web research returned no response");
   }
   return parsed;
+}
+
+export function providerError(status: number, body: unknown): HttpError {
+  const provider = isRecord(body) ? body as GeminiErrorBody : {};
+  if (status === 429) {
+    return new HttpError(503, "ai_quota_exhausted", "Gemini API quota is exhausted. Add billing or wait for quota to reset, then run research again.");
+  }
+  if (status === 404) {
+    return new HttpError(503, "ai_model_unavailable", `Gemini model ${config.geminiModel} is unavailable. Update GEMINI_MODEL and restart the API.`);
+  }
+  const message = provider.error?.message?.toLowerCase() ?? "";
+  if (message.includes("api key") || status === 401 || status === 403) {
+    return new HttpError(503, "ai_not_configured", "Gemini credentials were rejected. Check GEMINI_API_KEY and restart the API.");
+  }
+  return new HttpError(502, "web_research_failed", "Google web research could not be completed");
 }
 
 export function webResearchResponse(body: unknown): { text: string; sources: WebSource[] } {

@@ -55,8 +55,14 @@ export function ProjectDetail() {
     setName(project.name);
     setFiles(fileData.files);
     setTasks(taskData.tasks);
-    const latest = taskData.tasks.find((task) => task.type === "research" && task.resultId);
-    if (latest?.resultId) setResult(await api<Result>(`/results/${latest.resultId}`));
+    const latestResult = taskData.tasks.find((task) => task.type === "research" && task.resultId);
+    if (latestResult?.resultId) {
+      setResult(await api<Result>(`/results/${latestResult.resultId}`));
+    } else {
+      setResult(null);
+    }
+    const latestTask = taskData.tasks.find((task) => task.type === "research");
+    if (latestTask?.status === "failed" && latestTask.error?.message) setError(latestTask.error.message);
   }
 
   useEffect(() => {
@@ -97,6 +103,7 @@ export function ProjectDetail() {
     setError("");
     try {
       await api("/tasks", { method: "POST", body: JSON.stringify(parsed.data) });
+      setResult(null);
       await load();
     } catch (err) {
       setError(errorText(err));

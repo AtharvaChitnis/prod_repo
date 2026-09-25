@@ -22,7 +22,7 @@ export const config = {
   googleClientId: optional("GOOGLE_CLIENT_ID"),
   googleClientSecret: optional("GOOGLE_CLIENT_SECRET"),
   geminiApiKey: optional("GEMINI_API_KEY"),
-  geminiModel: optional("GEMINI_MODEL") || "gemini-2.0-flash",
+  geminiModel: optional("GEMINI_MODEL") || "gemini-3.8-flash",
   geminiEmbeddingModel: optional("GEMINI_EMBEDDING_MODEL") || "gemini-embedding-001",
   stripeSecretKey: optional("STRIPE_SECRET_KEY"),
   stripeWebhookSecret: optional("STRIPE_WEBHOOK_SECRET"),
