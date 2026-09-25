@@ -127,7 +127,7 @@ export type ResultDoc = {
     gaps: string[];
     confidence: "low" | "medium" | "high";
   };
-  sources: { chunkId: string; fileId: string; label: string; excerpt: string }[];
+  sources: { chunkId: string; fileId: string; label: string; excerpt: string; url?: string }[];
   createdAt: Date;
 };
 
