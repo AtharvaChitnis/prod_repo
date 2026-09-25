@@ -30,7 +30,7 @@ type Result = {
     gaps: string[];
     findings: { claim: string; evidence: string; sourceIds: string[] }[];
   };
-  sources: { chunkId: string; label: string; excerpt: string }[];
+  sources: { chunkId: string; label: string; excerpt: string; url?: string }[];
 };
 
 type Hit = { chunkId: string; sourceLabel: string; excerpt: string; score: number };
@@ -138,6 +138,7 @@ export function ProjectDetail() {
               <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={4} placeholder="What changed in renewal risk this quarter?" />
             </label>
             <button type="submit">Run research</button>
+            <p className="muted">Uses uploaded sources when available, otherwise searches the web.</p>
             {active ? <p className="muted">{active.status} · {active.progress.step} {active.progress.percent}%</p> : null}
           </form>
           {result ? (
@@ -154,9 +155,22 @@ export function ProjectDetail() {
                     <p>{finding.evidence}</p>
                     <p className="muted">{finding.sourceIds.join(", ") || "No cited source"}</p>
                   </li>
-                ))}
+              ))}
               </ul>
               {result.payload.gaps.length ? <p className="muted">Gaps: {result.payload.gaps.join(" · ")}</p> : null}
+              {result.sources.length ? (
+                <div className="stack">
+                  <h3>Sources</h3>
+                  <ul className="file-list">
+                    {result.sources.map((source) => (
+                      <li key={source.chunkId}>
+                        {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : <span>{source.label}</span>}
+                        <span className="muted">{source.excerpt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="row">
                 <button type="button" className="secondary" onClick={() => void downloadExport(result.id, "json")}>Export JSON</button>
                 <button type="button" className="secondary" onClick={() => void downloadExport(result.id, "csv")}>Export CSV</button>

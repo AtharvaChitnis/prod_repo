@@ -10,6 +10,7 @@ import { createTaskRecord, presentTask } from "../src/modules/tasks/record.js";
 import { ObjectId } from "mongodb";
 import { databaseName, mongoErrorFields } from "../src/mongoError.js";
 import { exchangeGoogleCode, googleAuthorizationUrl, googleRedirectUri } from "../src/modules/auth/googleOAuth.js";
+import { webResearchResponse } from "../src/modules/ai/web.js";
 
 describe("entitlements", () => {
   it("keeps a past-due paid plan and drops cancelled plans to free", () => {
@@ -179,5 +180,26 @@ describe("Google OAuth", () => {
       clientSecret: "client-secret",
       redirectUri: "https://api.example.com/api/v1/auth/oauth/google/callback",
     }, fetchMock), /verified email/);
+  });
+});
+
+describe("web research", () => {
+  it("keeps grounded web sources returned by Gemini", () => {
+    const response = webResearchResponse({
+      candidates: [{
+        content: { parts: [{ text: '{"summary":"Current market overview","findings":[],"gaps":[],"confidence":"low"}' }] },
+        groundingMetadata: {
+          groundingChunks: [
+            { web: { uri: "https://example.com/report", title: "Market report" } },
+            { web: { uri: "https://example.org/news" } },
+          ],
+        },
+      }],
+    });
+    assert.match(response.text, /Current market overview/);
+    assert.deepEqual(response.sources, [
+      { id: "web-1", label: "Market report", url: "https://example.com/report" },
+      { id: "web-2", label: "https://example.org/news", url: "https://example.org/news" },
+    ]);
   });
 });
